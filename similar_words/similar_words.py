@@ -4,6 +4,11 @@ Core module for finding similar words using NLTK's WordNet.
 
 from typing import List, Set, Optional
 
+try:
+    from nltk.corpus import wordnet
+except ImportError:
+    wordnet = None
+
 
 class SimilarWords:
     """
@@ -19,8 +24,12 @@ class SimilarWords:
     
     def _ensure_wordnet(self):
         """Ensure WordNet data is downloaded and available."""
+        global wordnet
+        if wordnet is None:
+            from nltk.corpus import wordnet as wn
+            wordnet = wn
+        
         try:
-            from nltk.corpus import wordnet
             # Try to access wordnet to see if it's available
             wordnet.synsets('test')
         except LookupError:
@@ -28,6 +37,25 @@ class SimilarWords:
             import nltk
             nltk.download('wordnet', quiet=True)
             nltk.download('omw-1.4', quiet=True)
+    
+    def _extract_lemmas(self, synsets, original_word: str) -> Set[str]:
+        """
+        Extract lemmas from synsets, excluding the original word.
+        
+        Args:
+            synsets: Iterable of WordNet synsets
+            original_word: The original word to exclude
+            
+        Returns:
+            A set of lemma names
+        """
+        lemmas: Set[str] = set()
+        for syn in synsets:
+            for lemma in syn.lemmas():
+                lemma_name = lemma.name().replace('_', ' ')
+                if lemma_name.lower() != original_word.lower():
+                    lemmas.add(lemma_name)
+        return lemmas
     
     def get_synonyms(self, word: str, limit: Optional[int] = None) -> List[str]:
         """
@@ -40,19 +68,7 @@ class SimilarWords:
         Returns:
             A list of synonyms for the word
         """
-        from nltk.corpus import wordnet
-        
-        synonyms: Set[str] = set()
-        
-        # Get all synsets for the word
-        for syn in wordnet.synsets(word):
-            # Get all lemmas (word forms) for each synset
-            for lemma in syn.lemmas():
-                synonym = lemma.name().replace('_', ' ')
-                # Don't include the original word
-                if synonym.lower() != word.lower():
-                    synonyms.add(synonym)
-        
+        synonyms = self._extract_lemmas(wordnet.synsets(word), word)
         result = sorted(list(synonyms))
         
         if limit is not None and limit > 0:
@@ -70,13 +86,9 @@ class SimilarWords:
         Returns:
             A list of definitions for the word
         """
-        from nltk.corpus import wordnet
-        
         definitions = []
-        
         for syn in wordnet.synsets(word):
             definitions.append(syn.definition())
-        
         return definitions
     
     def get_related_words(self, word: str, limit: Optional[int] = None) -> List[str]:
@@ -90,30 +102,17 @@ class SimilarWords:
         Returns:
             A list of related words
         """
-        from nltk.corpus import wordnet
-        
         related: Set[str] = set()
         
         for syn in wordnet.synsets(word):
             # Add synonyms
-            for lemma in syn.lemmas():
-                related_word = lemma.name().replace('_', ' ')
-                if related_word.lower() != word.lower():
-                    related.add(related_word)
+            related.update(self._extract_lemmas([syn], word))
             
             # Add hypernyms (more general terms)
-            for hypernym in syn.hypernyms():
-                for lemma in hypernym.lemmas():
-                    related_word = lemma.name().replace('_', ' ')
-                    if related_word.lower() != word.lower():
-                        related.add(related_word)
+            related.update(self._extract_lemmas(syn.hypernyms(), word))
             
             # Add hyponyms (more specific terms)
-            for hyponym in syn.hyponyms():
-                for lemma in hyponym.lemmas():
-                    related_word = lemma.name().replace('_', ' ')
-                    if related_word.lower() != word.lower():
-                        related.add(related_word)
+            related.update(self._extract_lemmas(syn.hyponyms(), word))
         
         result = sorted(list(related))
         

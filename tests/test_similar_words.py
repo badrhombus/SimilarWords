@@ -9,9 +9,10 @@ from similar_words import SimilarWords
 class TestSimilarWords(unittest.TestCase):
     """Test cases for the SimilarWords class."""
     
-    def setUp(self):
-        """Set up test fixtures."""
-        self.sw = SimilarWords()
+    @classmethod
+    def setUpClass(cls):
+        """Set up test fixtures once for all tests."""
+        cls.sw = SimilarWords()
     
     def test_get_synonyms_basic(self):
         """Test basic synonym retrieval."""
